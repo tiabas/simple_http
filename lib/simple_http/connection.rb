@@ -34,7 +34,9 @@ module SimpleHttp
       {
         :headers => {
           'Accept'     => 'application/json',
-          'User-Agent' => "Simple HTTP gem #{SimpleHttp::Version}"
+          'User-Agent' => "Simple HTTP gem #{SimpleHttp::Version}",
+          'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3'
+
         },
         :ssl => {:verify => true},
         :max_redirects => 5

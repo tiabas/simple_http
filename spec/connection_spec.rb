@@ -3,15 +3,16 @@ require File.expand_path('../spec_helper', __FILE__)
 describe SimpleHttp::Connection do
 
   subject do
-    @conn = SimpleHttp::Connection.new('https://yammer.com')
+    @conn = SimpleHttp::Connection.new('https://example.com')
   end
 
   context "with user options" do
     before do
       @options = {
         :headers => {
-          'Accept'     => 'application/json',
-          'User-Agent' => "Simple HTTP gem #{SimpleHttp::Version}"
+          'Accept'         => 'application/json',
+          'User-Agent'     => "Simple HTTP gem #{SimpleHttp::Version}",
+          'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3'
         },
         :ssl => {:verify => false},
         :max_redirects => 2
@@ -30,8 +31,9 @@ describe SimpleHttp::Connection do
   describe "#default_headers" do
     it "returns user_agent and response format" do
       expect(subject.default_headers).to eq ({
-        "Accept"     => "application/json", 
-        "User-Agent" => "Simple HTTP gem #{SimpleHttp::Version}"
+        "Accept"          => "application/json", 
+        "User-Agent"      => "Simple HTTP gem #{SimpleHttp::Version}",
+        'Accept-Encoding' => 'gzip;q=1.0,deflate;q=0.6,identity;q=0.3'
       })
     end
   end
@@ -66,7 +68,7 @@ describe SimpleHttp::Connection do
 
   describe "#host" do
     it "returns the host server" do
-      expect(subject.host).to eq 'yammer.com'
+      expect(subject.host).to eq 'example.com'
     end
   end
 
@@ -104,13 +106,13 @@ describe SimpleHttp::Connection do
   describe "#absolute_url" do
     context "with no parameters" do
       it "returns a uri without path" do
-        expect(subject.absolute_url).to eq "https://yammer.com"
+        expect(subject.absolute_url).to eq "https://example.com"
       end
     end
 
     context "with parameters" do
       it "returns a uri with path" do
-        expect(subject.absolute_url('/oauth/v2/authorize')).to eq "https://yammer.com/oauth/v2/authorize"
+        expect(subject.absolute_url('/oauth/v2/authorize')).to eq "https://example.com/oauth/v2/authorize"
       end
     end
   end
@@ -145,12 +147,12 @@ describe SimpleHttp::Connection do
       @http_ok = OpenStruct.new(
         :code    => '200',
         :body    => 'success',
-        :header => {'Content-Type' => "application/json"}
+        :headers => {'Content-Type' => "application/json"}
       )
       @http_redirect = OpenStruct.new(
         :code    => '301',
         :body    => 'redirect',
-        :header => {'Location' => "http://yammer.com/members"}
+        :headers => {'Location' => "https://example.com/members"}
       )
     end
 
@@ -162,112 +164,108 @@ describe SimpleHttp::Connection do
 
     context "when method is get" do
       it "returns an http response" do
-        path = '/oauth/authorize'
-        params = {:client_id => '001337', :client_secret => 'abcxyz'}
-        method = :get
-        
-        normalized_path = '/oauth/authorize?client_id=001337&client_secret=abcxyz'
-
-        Net::HTTP.any_instance.should_receive(:get).with(normalized_path, subject.default_headers).and_return(@http_ok)
-        response = subject.send_request(method, path, :params => params)
-
-        expect(response.code).to eq '200'
+        stub_get('/oauth/authorize').with(
+          :query => {:client_id => '001337', :client_secret => 'abcxyz'},
+          :headers => subject.default_headers
+        )
+        subject.send_request(:get, '/oauth/authorize', :params => {:client_id => '001337', :client_secret => 'abcxyz'})
       end
     end
 
     context "when method is delete" do
       it "returns an http response" do
-        path = '/users/1'
-        method = 'delete'
-
-        Net::HTTP.any_instance.should_receive(:delete).with(path, subject.default_headers).and_return(@http_ok)
-        response = subject.send_request(method, path)
-
-        expect(response.code).to eq '200'
+        stub_delete('/users/1').with(
+          :headers => subject.default_headers
+        )
+        subject.send_request(:delete, '/users/1')
       end
     end
 
     context "when method is post" do
       it "returns an http response" do
-        path = '/users'
-        params = {:first_name => 'john', :last_name => 'smith'}
-        query  = Addressable::URI.form_encode(params)
-        headers = {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
-
-        Net::HTTP.any_instance.should_receive(:post).with(path, query, headers).and_return(@http_ok)
-        response =subject.send_request(:post, path, :params => params)
-
-        expect(response.code).to eq '200'
+        stub_post('/users').with(
+          :body => {:first_name => 'john', :last_name => 'smith'},
+          :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+        )
+        subject.send_request(:post, '/users', :params => {:first_name => 'john', :last_name => 'smith'})
       end
     end
 
     context "when method is put" do
       it "returns an http response" do
-        path = '/users/1'
-        params = {:first_name => 'jane', :last_name => 'doe'}
-        query  = Addressable::URI.form_encode(params)
-        headers = {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
-
-        Net::HTTP.any_instance.should_receive(:put).with(path, query, headers).and_return(@http_ok)
-
-        response = subject.send_request(:put, path, :params => params)
-
-        expect(response.code).to eq '200'
+        stub_put('/users/1').with(
+          :body => {:first_name => 'jane', :last_name => 'doe'},
+          :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+        )
+        subject.send_request(:put, '/users/1', :params => {:first_name => 'jane', :last_name => 'doe'})
       end
     end
 
     it "follows redirect" do
-      path = '/users'
-      params = {:first_name => 'jane', :last_name => 'doe'}
-      query  = Addressable::URI.form_encode(params)
-      headers = {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
-      client = double("client")
 
-      subject.should_receive(:http_connection).twice.and_return(client, client)
-      client.should_receive(:post).ordered.with(path, query, headers).and_return(@http_redirect)
-      client.should_receive(:post).ordered.with('/members', query, headers).and_return(@http_ok)
+      stub_post('/users').with(
+        :body => {:first_name => 'jane', :last_name => 'doe'},
+        :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+      ).to_return(
+        :status => 301,
+        :body   => 'redirect',
+        :headers => {'Location' => "https://example.com/members"}
+      )
 
-      response = subject.send_request(:post, path, :params => params)
+      stub_post('/members').with(
+        :body => {:first_name => 'jane', :last_name => 'doe'},
+        :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+      ).to_return(
+        :status => 200,
+        :body   => 'sucess'
+      )
 
-      expect(response.code).to eq '200'
+      subject.send_request(:post, '/users', :params => {:first_name => 'jane', :last_name => 'doe'})
     end
 
     it "respects the redirect limit " do
       subject.max_redirects = 1
-      path = '/users'
-      params = {:first_name => 'jane', :last_name => 'doe'}
-      query  = Addressable::URI.form_encode(params)
-      headers = {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
-      client = double("client")
 
-      subject.should_receive(:http_connection).twice.and_return(client, client)
-      client.should_receive(:post).ordered.with(path, query, headers).and_return(@http_redirect)
-      client.should_receive(:post).ordered.with('/members', query, headers).and_return(@http_redirect)
+      stub_post('/users').with(
+        :body => {:first_name => 'jane', :last_name => 'doe'},
+        :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+      ).to_return(
+        :status => 301,
+        :body   => 'redirect',
+        :headers => {'Location' => "https://example.com/members"}
+      )
 
-      response = subject.send_request(:post, path, :params => params)
+      stub_post('/members').with(
+        :body => {:first_name => 'jane', :last_name => 'doe'},
+        :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+      ).to_return(
+        :status => 301,
+        :body   => 'redirect',
+        :headers => {'Location' => "https://example.com/profiles"}
+      )
 
-      expect(response.code).to eq '301'
+      subject.send_request(:post, '/users', :params => {:first_name => 'jane', :last_name => 'doe'})
     end
 
     it "modifies http 303 redirect from POST to GET " do
-      http_303 = OpenStruct.new(
-        :code    => '303',
-        :body    => 'redirect',
-        :header => {'Location' => "http://yammer.com/members"}
+
+      stub_post('/users').with(
+        :body => {:first_name => 'jane', :last_name => 'doe'},
+        :headers => {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
+      ).to_return(
+        :status => 303,
+        :body   => 'redirect',
+        :headers => {'Location' => "https://example.com/members"}
       )
-      path = '/users'
-      params = {:first_name => 'jane', :last_name => 'doe'}
-      query  = Addressable::URI.form_encode(params)
-      headers = {'Content-Type' => 'application/x-www-form-urlencoded' }.merge(subject.default_headers)
-      client = double("client")
 
-      subject.should_receive(:http_connection).twice.and_return(client, client)
-      client.should_receive(:post).ordered.with(path, query, headers).and_return(http_303)
-      client.should_receive(:get).ordered.with('/members', subject.default_headers).and_return(@http_ok)
+      stub_get('/members').with(
+        :headers => subject.default_headers
+      ).to_return(
+        :status => 200,
+        :body   => ''
+      )
+      response = subject.send_request(:post, '/users', :params => {:first_name => 'jane', :last_name => 'doe'})
 
-      response = subject.send_request(:post, path, :params => params)
-
-      expect(response.code).to eq '200'
     end
   end
 end
