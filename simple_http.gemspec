@@ -23,5 +23,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency 'webmock', '~> 1.9.0'
 
   gem.cert_chain    = ['certs/tiabas_public.pem']
-  gem.signing_key   = File.expand_path("~/.gem/certs/private_key.pem")
+  gem.signing_key   = File.expand_path("~/.gem/certs/private_key.pem") if $0 =~ /gem\z/
 end
