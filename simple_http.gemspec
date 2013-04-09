@@ -18,8 +18,8 @@ Gem::Specification.new do |gem|
 
   gem.add_development_dependency 'rake'
   gem.add_development_dependency 'rspec'
-  gem.add_development_dependency 'simplecov', '~> 0.7.1'
-  gem.add_development_dependency 'webmock', '~> 1.9.0'
+  gem.add_development_dependency 'simplecov', '>= 0.7.1'
+  gem.add_development_dependency 'webmock', '>= 1.9.0'
 
   gem.cert_chain    = ['certs/tiabas_public.pem']
   gem.signing_key   = File.expand_path("~/.gem/certs/private_key.pem") if $0 =~ /gem\z/
